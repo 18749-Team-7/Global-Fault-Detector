@@ -8,6 +8,8 @@ import time
 rm_port1 = 10002
 rm_port2 = 10001
 
+BUF_SIZE = 1024
+
 members_mutex = threading.Lock()
 
 
@@ -27,6 +29,14 @@ class GlobalFaultDetector:
         self.rm_thread.start()
         time.sleep(5)
         self.establish_lfd_connection.start()
+
+        print("CONNECTING TO RM FOR STATUS")
+        # Create a TCP/IP socket for sending status
+        self.rm_conn_2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Bind the socket to the replication port
+        server_address = self.rm_address2
+        print('Connecting to Replication Manager on rm_address{} port {}'.format(*server_address))
+        self.rm_conn_2.connect(server_address)
 
 
 
@@ -63,19 +73,20 @@ class GlobalFaultDetector:
     def lfd_service_thread(self, s, addr):
         # first time save the replica IPs corresponding to LFD
         try:
-            s.settimeout(2)
+            #s.settimeout(2)
+            print(addr)
             data = s.recv(BUF_SIZE)
             data = data.decode('utf-8')
-            json_data = json.load(data)
-            replica_ip = json_data[server_ip]
-            replica_status = json_data[status]
-            
+            json_data = json.loads(data)
+            replica_ip = json_data["server_ip"]
+            replica_status = json_data["status"]
             members_mutex.acquire()
             if addr not in self.lfd_replica_dict:
                 self.lfd_replica_dict[addr] = replica_ip
             members_mutex.release()
-        except:
-            print("timeout waiting from LFD")
+            print("RECEIVED MEMBERSHIP FROM LFD")
+        except Exception as e:
+            print(e)
             return
 
         # keep receiving status update from LFD, if you don't hear back from LFD, then replica failed
@@ -84,55 +95,46 @@ class GlobalFaultDetector:
                 s.settimeout(2)
                 data = s.recv(BUF_SIZE)
                 data = data.decode('utf-8')
-                json_data = json.load(data)
-                replica_ip = json_data[server_ip]
-                replica_status = json_data[status]
+                json_data = json.loads(data)
+                replica_ip = json_data["server_ip"]
+                replica_status = json_data["status"]
                 try:
-                    LFD_status_msg =str({"server_ip": replica_ip, "status": replica_status}).encode('utf-8')
-                    jsonObj = json.loads(str(LFD_status_msg))
-                    self.rm_conn_2.sendall(jsonObj)
+                    LFD_status_msg =json.dumps({"server_ip": str(replica_ip), "status": replica_status}).encode('utf-8')
+                    self.rm_conn_2.sendall(LFD_status_msg)
                     time.sleep(self.gfd_hb_interval)
-                except:
+                except Exception as e:
+                    print(e)
                     continue
-            except:
-                print("timeout from LFD")
+            except Exception as e:
+                print(e)
                 replica_ip = self.lfd_replica_dict[addr]
                 replica_status = False
                 try:
-                    LFD_status_msg =str({"server_ip": replica_ip, "status": replica_status}).encode('utf-8')
-                    jsonObj = json.loads(str(LFD_status_msg))
-                    self.rm_conn_2.sendall(jsonObj)
+                    LFD_status_msg =json.dumps({"server_ip": replica_ip, "status": replica_status}).encode('utf-8')
+                    self.rm_conn_2.sendall(LFD_status_msg)
                     time.sleep(self.gfd_hb_interval)
                 except:
                     continue
                
 
+
     def lfd_connection(self):
         try:
-            print("CONNECTING TO RM FOR STATUS")
-            # Create a TCP/IP socket for sending status
-            self.rm_conn_2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            # Bind the socket to the replication port
-            server_address = self.rm_address2
-            print('Connecting to Replication Manager on rm_address{} port {}'.format(*server_address))
-            self.rm_conn_2.connect(server_address)
-
             print("LISTENING FOR LFD")
             # Create a TCP/IP socket
             lfd_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # # Bind the socket to the replication port
             server_address = ('localhost', self.gfd_port)
             # print('Started listening for LFD on {} port {}'.format(*server_address))
-            lfd_conn.bind(server_address)
-            
+            lfd_conn.bind(server_address)  
             # # Listen for incoming connections
             lfd_conn.listen(5)
             i = 1
             while(True):
                 # Accept a new connection
                 conn, addr = lfd_conn.accept()
-                print("Establish connection with LFD " + str(i))
-                Initiate a client listening thread
+                print("Establish connection with LFD " + str(addr) + str(i))
+                #Initiate a client listening thread
                 threading.Thread(target=self.lfd_service_thread, args=(conn, addr)).start()
                 i+=1
 
