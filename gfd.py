@@ -84,7 +84,6 @@ class GlobalFaultDetector:
             if addr not in self.lfd_replica_dict:
                 self.lfd_replica_dict[addr] = replica_ip
             members_mutex.release()
-            print("RECEIVED MEMBERSHIP FROM LFD")
         except Exception as e:
             print(e)
             return
@@ -92,6 +91,7 @@ class GlobalFaultDetector:
         # keep receiving status update from LFD, if you don't hear back from LFD, then replica failed
         while True:      
             try:
+                print("Received heartbeat from LFD")
                 s.settimeout(2)
                 data = s.recv(BUF_SIZE)
                 data = data.decode('utf-8')
