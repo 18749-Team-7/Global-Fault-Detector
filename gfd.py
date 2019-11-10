@@ -1,12 +1,11 @@
 import json
 import requests
-from _thread import *
+# from _thread import *
 import threading
 import socket
 import time
+import argparse
 
-rm_port1 = 10002
-rm_port2 = 10001
 
 BUF_SIZE = 1024
 
@@ -14,12 +13,25 @@ members_mutex = threading.Lock()
 
 
 class GlobalFaultDetector:
-    def __init__(self, rm_address='localhost', gfd_hb_interval=1):
+    def __init__(self, rm_address=None, gfd_hb_interval=1):
         self.establish_lfd_connection = threading.Thread(target=self.lfd_connection)
+        # host_name = socket.gethostname() 
+        # rm_address = socket.gethostbyname(host_name) 
+        # print("Replica Manager Address:", rm_address)
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        self.host_ip = s.getsockname()[0]
+        rm_address = self.host_ip
+
+
+        self.rm_port1 = 10002
+        self.rm_port2 = 10001
+
         #this is for heartbeat
-        self.rm_address1 = (rm_address, rm_port1)
+        self.rm_address1 = (rm_address, self.rm_port1)
         #this is for status
-        self.rm_address2 = (rm_address, rm_port2)
+        self.rm_address2 = (rm_address, self.rm_port2)
         self.gfd_hb_interval = gfd_hb_interval
         self.gfd_port = 12345
         self.rm_thread = threading.Thread(target=self.establish_RM_connection)
@@ -124,7 +136,11 @@ class GlobalFaultDetector:
             # Create a TCP/IP socket
             lfd_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # # Bind the socket to the replication port
-            server_address = ('localhost', self.gfd_port)
+            # host_name = socket.gethostname() 
+            # host_ip = socket.gethostbyname(host_name) 
+
+            server_address = (self.host_ip, self.gfd_port)
+            # server_address = ('localhost', self.gfd_port)
             # print('Started listening for LFD on {} port {}'.format(*server_address))
             lfd_conn.bind(server_address)  
             # # Listen for incoming connections
@@ -143,7 +159,17 @@ class GlobalFaultDetector:
             lfd_conn.close()
 
 
+# def get_args():
+#     parser = argparse.ArgumentParser()
 
+#     # IP, PORT, Username
+#     parser.add_argument('-ip', '--ip', help="Replication Manager IP Address", required=True)
+    
+#     # Parse the arguments
+#     args = parser.parse_args()
+#     return args
 
 if __name__=="__main__":
+    # Extract Arguments from the 
+    # args = get_args()
     gfd = GlobalFaultDetector()
