@@ -28,29 +28,34 @@ class GlobalFaultDetector:
         self.lfd_replica_dict = {}
         self.HB_counter = 0
         self.members_mutex = threading.Lock()
+        self.gfd_hb_interval = gfd_hb_interval
+        self.gfd_port = 12345
 
         # Heartbeat RM thread
         self.rm_hb_port = 10002
         self.rm_hb_addr = (self.host_ip, self.rm_hb_port)
         threading.Thread(target=self.establish_RM_HB_connection).start()
+
+        # RM status updating
+        time.sleep(2)
+        self.rm_status_port = 10001
+        self.rm_address2 = (self.host_ip, self.rm_status_port)
+        self.init_rm_status_comm()
         
         # LFD listening Thread
-        self.rm_port2 = 10001
-        self.rm_address2 = (self.host_ip, self.rm_port2)
-        self.gfd_hb_interval = gfd_hb_interval
-        self.gfd_port = 12345
-
-        time.sleep(3)
         threading.Thread(target=self.init_lfd_comm).start() # Start LFD listening
 
-        print(RED + "Connecting to RM for status..." + RESET)
+    def init_rm_status_comm(self):
         # Create a TCP/IP socket for sending status
         self.rm_conn_2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Bind the socket to the replication port
-        server_address = self.rm_address2
-        print(RED + "Connecting to Replication Manager on rm_address {} port {} ...".format(*server_address) + RESET)
-        self.rm_conn_2.connect(server_address)
+        print(RED + "Connecting to RM for status {} ...".format(self.rm_address2) + RESET)
+        try:
+            self.rm_conn_2.connect(self.rm_address2)
+        except:
+            print(RED + "Could not connect to RM for status" + RESET)
+            os._exit()
 
     # Finds the IP on the host
     def get_host_ip(self):
@@ -96,25 +101,34 @@ class GlobalFaultDetector:
         # first time save the replica IPs corresponding to LFD
         try:
             #s.settimeout(2)
-            print(addr)
             data = s.recv(BUF_SIZE)
-            data = data.decode('utf-8')
-            json_data = json.loads(data)
-            replica_ip = json_data["server_ip"]
-            replica_status = json_data["status"]
-            self.members_mutex.acquire()
-            if addr not in self.lfd_replica_dict:
-                self.lfd_replica_dict[addr] = replica_ip
-            self.members_mutex.release()
         except Exception as e:
             print(e)
             return
 
+        lfd_count = 0
+        
+        data = data.decode('utf-8')
+        json_data = json.loads(data)
+
+        replica_ip = json_data["server_ip"]
+        replica_status = json_data["status"]
+
+        # Edit the replica_ip_list
+        self.members_mutex.acquire()
+        if addr not in self.lfd_replica_dict:
+            self.lfd_replica_dict[addr] = replica_ip
+        self.members_mutex.release()
+
         # keep receiving status update from LFD, if you don't hear back from LFD, then replica failed
         while True:      
             try:
-                print("Received heartbeat from LFD")
+                print(RED + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
+                lfd_count += 1
+
+                # Set timeout to figure death of LFD
                 s.settimeout(2)
+
                 data = s.recv(BUF_SIZE)
                 data = data.decode('utf-8')
                 json_data = json.loads(data)
