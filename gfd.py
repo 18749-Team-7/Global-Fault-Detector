@@ -1,10 +1,10 @@
 import json
 import requests
-# from _thread import *
 import threading
 import socket
 import time
 import argparse
+import os
 
 
 BUF_SIZE = 1024
@@ -23,29 +23,26 @@ RESET =     "\u001b[0m"
 
 class GlobalFaultDetector:
     def __init__(self, rm_address=None, gfd_hb_interval=1):
-        self.establish_lfd_connection = threading.Thread(target=self.lfd_connection)
-
+        # Get host IP
         self.get_host_ip()
-        rm_address = self.host_ip
 
-        self.rm_port1 = 10002
-        self.rm_port2 = 10001
-
+        # Global Variables
+        self.lfd_replica_dict = {}
         self.HB_counter = 0
 
-        #this is for heartbeat
-        self.rm_address1 = (rm_address, self.rm_port1)
-        #this is for status
-        self.rm_address2 = (rm_address, self.rm_port2)
+        # Heartbeat RM thread
+        self.rm_hb_port = 10002
+        self.rm_hb_addr = (self.host_ip, self.rm_hb_port)
+        threading.Thread(target=self.establish_RM_HB_connection).start()
+        
+        # LFD listening Thread
+        self.rm_port2 = 10001
+        self.rm_address2 = (self.host_ip, self.rm_port2)
         self.gfd_hb_interval = gfd_hb_interval
         self.gfd_port = 12345
-        self.rm_thread = threading.Thread(target=self.establish_RM_connection)
-        self.lfd_replica_dict = {}
 
-        print(RED + "Establishing connection with Replication Manager..." + RESET)
-        self.rm_thread.start()
         time.sleep(3)
-        self.establish_lfd_connection.start()
+        threading.Thread(target=self.lfd_connection).start() # Start LFD listening
 
         print(RED + "Connecting to RM for status..." + RESET)
         # Create a TCP/IP socket for sending status
@@ -61,35 +58,38 @@ class GlobalFaultDetector:
         s.connect(("8.8.8.8", 80))
         self.host_ip = s.getsockname()[0]
 
-    def establish_RM_connection(self):
+    def establish_RM_HB_connection(self):
+        print(RED + "Establishing connection with Replication Manager..." + RESET)
         try:
             # Create a TCP/IP socket for hearbeat
             self.rm_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
             # Bind the socket to the replication port
-            server_address = self.rm_address1
-            print(RED + 'Connecting to Replication Manager on rm_address {} port {} ...'.format(*server_address) + RESET)
-            self.rm_conn.connect(server_address)
+            print(RED + 'Connecting to Replication Manager on IP: {} ...'.format(self.rm_hb_addr) + RESET)
+            self.rm_conn.connect(self.rm_hb_addr)
 
             self.RM_heartbeat_func()
-        except Exception as e:
-            print(e)
+        except:
+            print(RED + "Connection with RM could not be established" + RESET)
+            os._exit()
+
 
 
     def RM_heartbeat_func(self): 
-        while 1:
-            try:
-                # Waiting for RM membership data
-                while True:
-                    RM_heartbeat_msg = "GFD_heartbeat"
-                    RM_heartbeat_msg = RM_heartbeat_msg.encode('utf-8')
-                    self.rm_conn.send(RM_heartbeat_msg)
-                    print("Sent hearbeat to RM")
-                    time.sleep(self.gfd_hb_interval)
-            finally:
-                # GFD connection errors
-                print("RM connection lost")
-                # Clean up the connection
-                self.rm_conn.close()
+        try:
+            # Waiting for RM membership data
+            while True:
+                RM_heartbeat_msg = "GFD_heartbeat"
+                RM_heartbeat_msg = RM_heartbeat_msg.encode('utf-8')
+                self.rm_conn.send(RM_heartbeat_msg)
+                print("Sent hearbeat to RM")
+                time.sleep(self.gfd_hb_interval)
+        finally:
+            # GFD connection errors
+            print(RED + "RM connection has been lost" + RESET)
+            
+            # Clean up the connection
+            self.rm_conn.close()
 
     def lfd_service_thread(self, s, addr):
         # first time save the replica IPs corresponding to LFD
