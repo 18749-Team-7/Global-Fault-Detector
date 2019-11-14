@@ -9,8 +9,6 @@ import os
 
 BUF_SIZE = 1024
 
-members_mutex = threading.Lock()
-
 BLACK =     "\u001b[30m"
 RED =       "\u001b[31m"
 GREEN =     "\u001b[32m"
@@ -29,6 +27,7 @@ class GlobalFaultDetector:
         # Global Variables
         self.lfd_replica_dict = {}
         self.HB_counter = 0
+        self.members_mutex = threading.Lock()
 
         # Heartbeat RM thread
         self.rm_hb_port = 10002
@@ -42,7 +41,7 @@ class GlobalFaultDetector:
         self.gfd_port = 12345
 
         time.sleep(3)
-        threading.Thread(target=self.lfd_connection).start() # Start LFD listening
+        threading.Thread(target=self.init_lfd_comm).start() # Start LFD listening
 
         print(RED + "Connecting to RM for status..." + RESET)
         # Create a TCP/IP socket for sending status
@@ -53,11 +52,14 @@ class GlobalFaultDetector:
         print(RED + "Connecting to Replication Manager on rm_address {} port {} ...".format(*server_address) + RESET)
         self.rm_conn_2.connect(server_address)
 
+    # Finds the IP on the host
     def get_host_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         self.host_ip = s.getsockname()[0]
 
+    # Establishes connection for heartbeating with the RM
+    # Uses port: 10002
     def establish_RM_HB_connection(self):
         print(RED + "Establishing connection with Replication Manager..." + RESET)
         try:
@@ -74,7 +76,7 @@ class GlobalFaultDetector:
             os._exit()
 
 
-
+    # Heart beating function for the RM
     def RM_heartbeat_func(self): 
         try:
             # Waiting for RM membership data
@@ -82,7 +84,6 @@ class GlobalFaultDetector:
                 RM_heartbeat_msg = "GFD_heartbeat"
                 RM_heartbeat_msg = RM_heartbeat_msg.encode('utf-8')
                 self.rm_conn.send(RM_heartbeat_msg)
-                print("Sent hearbeat to RM")
                 time.sleep(self.gfd_hb_interval)
         finally:
             # GFD connection errors
@@ -101,10 +102,10 @@ class GlobalFaultDetector:
             json_data = json.loads(data)
             replica_ip = json_data["server_ip"]
             replica_status = json_data["status"]
-            members_mutex.acquire()
+            self.members_mutex.acquire()
             if addr not in self.lfd_replica_dict:
                 self.lfd_replica_dict[addr] = replica_ip
-            members_mutex.release()
+            self.members_mutex.release()
         except Exception as e:
             print(e)
             return
@@ -139,27 +140,24 @@ class GlobalFaultDetector:
                
 
 
-    def lfd_connection(self):
+    def init_lfd_comm(self):
         try:
-            print("LISTENING FOR LFD")
             # Create a TCP/IP socket
             lfd_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            # # Bind the socket to the replication port
-            # host_name = socket.gethostname() 
-            # host_ip = socket.gethostbyname(host_name) 
 
-            server_address = (self.host_ip, self.gfd_port)
-            # server_address = ('localhost', self.gfd_port)
-            # print('Started listening for LFD on {} port {}'.format(*server_address))
-            lfd_conn.bind(server_address)  
-            # # Listen for incoming connections
+            lfd_conn.bind((self.host_ip, self.gfd_port))  
+            # Listen for incoming connections
             lfd_conn.listen(5)
+
+            print(RED + "Started listening for LFD on {} port {} ...".format(self.host_ip, self.gfd_port) + RESET)
+
             i = 1
             while(True):
                 # Accept a new connection
                 conn, addr = lfd_conn.accept()
-                print("Establish connection with LFD " + str(addr) + str(i))
-                #Initiate a client listening thread
+                print(RED + "Connected to LFD: {}".format(addr) + RESET)
+
+                # Start the client listening thread
                 threading.Thread(target=self.lfd_service_thread, args=(conn, addr)).start()
                 i+=1
 
