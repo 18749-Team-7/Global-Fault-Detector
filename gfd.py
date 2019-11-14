@@ -24,18 +24,14 @@ RESET =     "\u001b[0m"
 class GlobalFaultDetector:
     def __init__(self, rm_address=None, gfd_hb_interval=1):
         self.establish_lfd_connection = threading.Thread(target=self.lfd_connection)
-        # host_name = socket.gethostname() 
-        # rm_address = socket.gethostbyname(host_name) 
-        # print("Replica Manager Address:", rm_address)
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        self.host_ip = s.getsockname()[0]
+        self.get_host_ip()
         rm_address = self.host_ip
-
 
         self.rm_port1 = 10002
         self.rm_port2 = 10001
+
+        self.HB_counter = 0
 
         #this is for heartbeat
         self.rm_address1 = (rm_address, self.rm_port1)
@@ -46,20 +42,24 @@ class GlobalFaultDetector:
         self.rm_thread = threading.Thread(target=self.establish_RM_connection)
         self.lfd_replica_dict = {}
 
-        print("Establishing connection with Replication Manager")
+        print(RED + "Establishing connection with Replication Manager..." + RESET)
         self.rm_thread.start()
-        time.sleep(5)
+        time.sleep(3)
         self.establish_lfd_connection.start()
 
-        print("CONNECTING TO RM FOR STATUS")
+        print(RED + "Connecting to RM for status..." + RESET)
         # Create a TCP/IP socket for sending status
         self.rm_conn_2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
         # Bind the socket to the replication port
         server_address = self.rm_address2
-        print('Connecting to Replication Manager on rm_address{} port {}'.format(*server_address))
+        print(RED + "Connecting to Replication Manager on rm_address {} port {} ...".format(*server_address) + RESET)
         self.rm_conn_2.connect(server_address)
 
-
+    def get_host_ip(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        self.host_ip = s.getsockname()[0]
 
     def establish_RM_connection(self):
         try:
@@ -67,7 +67,7 @@ class GlobalFaultDetector:
             self.rm_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # Bind the socket to the replication port
             server_address = self.rm_address1
-            print('Connecting to Replication Manager on rm_address {} port {}'.format(*server_address))
+            print(RED + 'Connecting to Replication Manager on rm_address {} port {} ...'.format(*server_address) + RESET)
             self.rm_conn.connect(server_address)
 
             self.RM_heartbeat_func()
@@ -167,18 +167,5 @@ class GlobalFaultDetector:
             # Closing the server
             lfd_conn.close()
 
-
-# def get_args():
-#     parser = argparse.ArgumentParser()
-
-#     # IP, PORT, Username
-#     parser.add_argument('-ip', '--ip', help="Replication Manager IP Address", required=True)
-    
-#     # Parse the arguments
-#     args = parser.parse_args()
-#     return args
-
 if __name__=="__main__":
-    # Extract Arguments from the 
-    # args = get_args()
     gfd = GlobalFaultDetector()
