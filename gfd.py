@@ -123,9 +123,6 @@ class GlobalFaultDetector:
         # keep receiving status update from LFD, if you don't hear back from LFD, then replica failed
         while True:      
             try:
-                print(RED + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
-                lfd_count += 1
-
                 # Set timeout to figure death of LFD
                 s.settimeout(2)
 
@@ -134,6 +131,10 @@ class GlobalFaultDetector:
                 json_data = json.loads(data)
                 replica_ip = json_data["server_ip"]
                 replica_status = json_data["status"]
+
+                print(BLUE + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
+                lfd_count += 1
+
                 try:
                     LFD_status_msg =json.dumps({"server_ip": str(replica_ip), "status": replica_status}).encode('utf-8')
                     self.rm_conn_2.sendall(LFD_status_msg)
