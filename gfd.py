@@ -48,6 +48,7 @@ class GlobalFaultDetector:
     def init_rm_status_comm(self):
         # Create a TCP/IP socket for sending status
         self.rm_conn_2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.rm_conn_2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         # Bind the socket to the replication port
         print(RED + "Connecting to RM for status {} ...".format(self.rm_address2) + RESET)
@@ -60,6 +61,7 @@ class GlobalFaultDetector:
     # Finds the IP on the host
     def get_host_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.connect(("8.8.8.8", 80))
         self.host_ip = s.getsockname()[0]
 
@@ -70,6 +72,7 @@ class GlobalFaultDetector:
         try:
             # Create a TCP/IP socket for hearbeat
             self.rm_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.rm_conn.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
             # Bind the socket to the replication port
             print(RED + 'Connecting to Replication Manager on IP: {} ...'.format(self.rm_hb_addr) + RESET)
@@ -159,6 +162,7 @@ class GlobalFaultDetector:
         try:
             # Create a TCP/IP socket
             lfd_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            lfd_conn.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
             lfd_conn.bind((self.host_ip, self.gfd_port))  
             # Listen for incoming connections
@@ -180,5 +184,15 @@ class GlobalFaultDetector:
             # Closing the server
             lfd_conn.close()
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-hbf', '--hb_freq', help=“Heartbeat Frequency”, type=int, default=1)
+    # Parse the arguments
+    args = parser.parse_args()
+    return args
+
 if __name__=="__main__":
-    gfd = GlobalFaultDetector()
+        # Extract Arguments from the 
+    args = get_args()
+
+    gfd = GlobalFaultDetector(gfd_hb_interval=args.hb_freq)
