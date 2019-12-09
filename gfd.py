@@ -28,7 +28,7 @@ class GlobalFaultDetector:
         self.lfd_replica_dict = {}
         self.HB_counter = 0
         self.members_mutex = threading.Lock()
-        self.gfd_hb_interval = gfd_hb_interval
+        self.gfd_hb_interval = int(gfd_hb_interval)
         self.gfd_port = 12345
 
         # Heartbeat RM thread
@@ -127,7 +127,8 @@ class GlobalFaultDetector:
         while True:      
             try:
                 # Set timeout to figure death of LFD
-                s.settimeout(2)
+                timeout = int(self.gfd_hb_interval + 2)
+                s.settimeout(timeout)
 
                 data = s.recv(BUF_SIZE)
                 data = data.decode('utf-8')
