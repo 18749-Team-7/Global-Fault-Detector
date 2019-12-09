@@ -186,7 +186,7 @@ class GlobalFaultDetector:
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-hbf', '--hb_freq', help=“Heartbeat Frequency”, type=int, default=1)
+    parser.add_argument('-hbf', '--hb_freq', help="Heartbeat Frequency", type=int, default=1)
     # Parse the arguments
     args = parser.parse_args()
     return args
