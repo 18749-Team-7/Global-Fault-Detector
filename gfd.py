@@ -127,7 +127,7 @@ class GlobalFaultDetector:
         while True:      
             try:
                 # Set timeout to figure death of LFD
-                s.settimeout(self.gfd_hb_interval + 2)
+                s.settimeout(2)
 
                 data = s.recv(BUF_SIZE)
                 data = data.decode('utf-8')
