@@ -135,7 +135,7 @@ class GlobalFaultDetector:
                 json_data = json.loads(data)
                 replica_ip = json_data["server_ip"]
                 replica_status = json_data["status"]
-                self.gfd_hb_interval = data["time"]
+                self.gfd_hb_interval = json_data["time"]
 
                 print(BLUE + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
                 lfd_count += 1
