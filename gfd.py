@@ -1,5 +1,4 @@
 import json
-import requests
 import threading
 import socket
 import time
@@ -29,7 +28,8 @@ class GlobalFaultDetector:
         self.HB_counter = 0
         self.members_mutex = threading.Lock()
         self.gfd_hb_interval = gfd_hb_interval
-        self.gfd_port = 12345
+        self.lfd_timeout_value = 2
+        self.lfd_listening_port = 12345
 
         # Heartbeat RM thread
         self.rm_hb_port = 10002
@@ -45,17 +45,10 @@ class GlobalFaultDetector:
         # LFD listening Thread
         threading.Thread(target=self.init_lfd_comm).start() # Start LFD listening
 
-    def init_rm_status_comm(self):
-        # Create a TCP/IP socket for sending status
-        self.rm_conn_2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        # Bind the socket to the replication port
-        print(RED + "Connecting to RM for status {} ...".format(self.rm_address2) + RESET)
-        try:
-            self.rm_conn_2.connect(self.rm_address2)
-        except:
-            print(RED + "Could not connect to RM for status" + RESET)
-            os._exit()
+    ###############################################
+    # Misc helpers
+    ###############################################
 
     # Finds the IP on the host
     def get_host_ip(self):
@@ -63,17 +56,42 @@ class GlobalFaultDetector:
         s.connect(("8.8.8.8", 80))
         self.host_ip = s.getsockname()[0]
 
+
+    ###############################################
+    # Functions for Communication to RM
+    ###############################################
+
+    def init_rm_status_comm(self):
+        # Create a TCP/IP socket for sending status
+        self.rm_status_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # Bind the socket to the replication port
+        print(RED + "Connecting to RM for status {} ...".format(self.rm_address2) + RESET)
+        try:
+            self.rm_status_conn.connect(self.rm_address2)
+        except:
+            print(RED + "Could not connect to RM for status" + RESET)
+            os._exit()
+
+    def send_replica_status(self, replica_ip, replica_status):
+        try:
+            status_msg = json.dumps({"server_ip": str(replica_ip), "status": replica_status}).encode('utf-8')
+            self.rm_status_conn.sendall(status_msg)
+        except Exception as e:
+            print(e)
+
+
     # Establishes connection for heartbeating with the RM
     # Uses port: 10002
     def establish_RM_HB_connection(self):
         print(RED + "Establishing connection with Replication Manager..." + RESET)
         try:
             # Create a TCP/IP socket for hearbeat
-            self.rm_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.rm_hb_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
             # Bind the socket to the replication port
             print(RED + 'Connecting to Replication Manager on IP: {} ...'.format(self.rm_hb_addr) + RESET)
-            self.rm_conn.connect(self.rm_hb_addr)
+            self.rm_hb_conn.connect(self.rm_hb_addr)
 
             self.RM_heartbeat_func()
         except:
@@ -88,14 +106,21 @@ class GlobalFaultDetector:
             while True:
                 RM_heartbeat_msg = "GFD_heartbeat"
                 RM_heartbeat_msg = RM_heartbeat_msg.encode('utf-8')
-                self.rm_conn.send(RM_heartbeat_msg)
+                self.rm_hb_conn.send(RM_heartbeat_msg)
                 time.sleep(self.gfd_hb_interval)
         finally:
             # GFD connection errors
             print(RED + "RM connection has been lost" + RESET)
             
             # Clean up the connection
-            self.rm_conn.close()
+            self.rm_hb_conn.close()
+
+
+
+
+    ###############################################
+    # Functions for Communication to LFD
+    ###############################################
 
     def lfd_service_thread(self, s, addr):
         # first time save the replica IPs corresponding to LFD
@@ -104,6 +129,7 @@ class GlobalFaultDetector:
             data = s.recv(BUF_SIZE)
         except Exception as e:
             print(e)
+            s.close()
             return
 
         lfd_count = 0
@@ -124,49 +150,61 @@ class GlobalFaultDetector:
         while True:      
             try:
                 # Set timeout to figure death of LFD
-                s.settimeout(2)
+                s.settimeout(self.lfd_timeout_value)
 
                 data = s.recv(BUF_SIZE)
-                data = data.decode('utf-8')
-                json_data = json.loads(data)
-                replica_ip = json_data["server_ip"]
-                replica_status = json_data["status"]
+                if data:
+                    data = data.decode('utf-8')
+                    json_data = json.loads(data)
+                    replica_ip = json_data["server_ip"]
+                    replica_status = json_data["status"]
 
-                print(BLUE + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
-                lfd_count += 1
+                    print(BLUE + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
+                    lfd_count += 1
 
-                try:
-                    LFD_status_msg =json.dumps({"server_ip": str(replica_ip), "status": replica_status}).encode('utf-8')
-                    self.rm_conn_2.sendall(LFD_status_msg)
+                    self.send_replica_status(replica_ip, replica_status)
                     time.sleep(self.gfd_hb_interval)
-                except Exception as e:
-                    print(e)
-                    continue
+
+                else:
+                    print(RED + 'No data from LFD at {}'.format(addr) + RESET)
+                    replica_ip = self.lfd_replica_dict[addr]
+                    replica_status = False
+                    self.send_replica_status(replica_ip, replica_status)
+                    s.close()
+                    break
+
+
+            # Timeout - may be temporary, update status but do not close connection
+            except socket.timeout:
+                print(BLUE + "Waiting for heartbeat from LFD at {} timed out".format(addr) + RESET)
+                replica_ip = self.lfd_replica_dict[addr]
+                replica_status = False
+                self.send_replica_status(replica_ip, replica_status)
+                time.sleep(self.gfd_hb_interval)
+
+
+            # Other exception - permantently close connection, to allow LFD to reconnect later.
             except Exception as e:
                 print(e)
                 replica_ip = self.lfd_replica_dict[addr]
                 replica_status = False
-                try:
-                    LFD_status_msg =json.dumps({"server_ip": replica_ip, "status": replica_status}).encode('utf-8')
-                    self.rm_conn_2.sendall(LFD_status_msg)
-                    time.sleep(self.gfd_hb_interval)
-                except:
-                    continue
-               
+                self.send_replica_status(replica_ip, replica_status)
+                s.close()
+
 
 
     def init_lfd_comm(self):
         try:
             # Create a TCP/IP socket
             lfd_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            lfd_conn.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-            lfd_conn.bind((self.host_ip, self.gfd_port))  
+            lfd_conn.bind((self.host_ip, self.lfd_listening_port))  
             # Listen for incoming connections
             lfd_conn.listen(5)
 
-            print(RED + "Started listening for LFD on {} port {} ...".format(self.host_ip, self.gfd_port) + RESET)
+            print(RED + "Started listening for LFD on {} port {} ...".format(self.host_ip, self.lfd_listening_port) + RESET)
 
-            i = 1
             while(True):
                 # Accept a new connection
                 conn, addr = lfd_conn.accept()
@@ -174,7 +212,6 @@ class GlobalFaultDetector:
 
                 # Start the client listening thread
                 threading.Thread(target=self.lfd_service_thread, args=(conn, addr)).start()
-                i+=1
 
         except KeyboardInterrupt:
             # Closing the server
