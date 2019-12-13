@@ -19,7 +19,7 @@ WHITE =     "\u001b[37m"
 RESET =     "\u001b[0m"
 
 class GlobalFaultDetector:
-    def __init__(self, rm_address=None, gfd_hb_interval=1):
+    def __init__(self):
         # Get host IP
         self.get_host_ip()
 
@@ -27,7 +27,7 @@ class GlobalFaultDetector:
         self.lfd_replica_dict = {}
         self.HB_counter = 0
         self.members_mutex = threading.Lock()
-        self.gfd_hb_interval = gfd_hb_interval
+        self.gfd_hb_interval = 1
         self.lfd_timeout_value = 2
         self.lfd_listening_port = 12345
 
@@ -154,7 +154,7 @@ class GlobalFaultDetector:
         while True:      
             try:
                 # Set timeout to figure death of LFD
-                s.settimeout(self.lfd_timeout_value)
+                # s.settimeout(self.lfd_timeout_value)
 
                 data = s.recv(BUF_SIZE)
                 if data:
@@ -162,6 +162,7 @@ class GlobalFaultDetector:
                     json_data = json.loads(data)
                     replica_ip = json_data["server_ip"]
                     replica_status = json_data["status"]
+                    self.gfd_hb_interval = json["time"]
 
                     print(BLUE + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
                     lfd_count += 1
