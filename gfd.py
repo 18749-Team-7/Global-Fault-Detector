@@ -20,7 +20,7 @@ WHITE =     "\u001b[37m"
 RESET =     "\u001b[0m"
 
 class GlobalFaultDetector:
-    def __init__(self, rm_address=None, gfd_hb_interval=5):
+    def __init__(self, rm_address=None, gfd_hb_interval=1):
         # Get host IP
         self.get_host_ip()
 
@@ -135,7 +135,7 @@ class GlobalFaultDetector:
                 json_data = json.loads(data)
                 replica_ip = json_data["server_ip"]
                 replica_status = json_data["status"]
-                self.gfd_hb_interval = json_data["time"]
+                # self.gfd_hb_interval = json_data["time"]
 
                 print(BLUE + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
                 lfd_count += 1
