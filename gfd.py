@@ -127,22 +127,23 @@ class GlobalFaultDetector:
         while True:      
             try:
                 # Set timeout to figure death of LFD
-                timeout = int(self.gfd_hb_interval + 2)
-                s.settimeout(timeout)
+                # timeout = int(self.gfd_hb_interval + 2)
+                # s.settimeout(timeout)
 
                 data = s.recv(BUF_SIZE)
                 data = data.decode('utf-8')
                 json_data = json.loads(data)
                 replica_ip = json_data["server_ip"]
                 replica_status = json_data["status"]
+                self.gfd_hb_interval = data["time"]
 
                 print(BLUE + "Received heartbeat from LFD at: {} | Heartbeat count: {}".format(addr, lfd_count) + RESET)
                 lfd_count += 1
 
                 try:
+                    # time.sleep(self.gfd_hb_interval)
                     LFD_status_msg =json.dumps({"server_ip": str(replica_ip), "status": replica_status}).encode('utf-8')
                     self.rm_conn_2.sendall(LFD_status_msg)
-                    time.sleep(self.gfd_hb_interval)
                 except Exception as e:
                     print(e)
                     continue
