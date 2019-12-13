@@ -65,6 +65,11 @@ class GlobalFaultDetector:
         s.connect(("8.8.8.8", 80))
         self.host_ip = s.getsockname()[0]
 
+    def print_exception(self):
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        print(exc_type, fname, exc_tb.tb_lineno)
+
     # Establishes connection for heartbeating with the RM
     # Uses port: 10002
     def establish_RM_HB_connection(self):
@@ -106,7 +111,7 @@ class GlobalFaultDetector:
             #s.settimeout(2)
             data = s.recv(BUF_SIZE)
         except Exception as e:
-            print(e)
+            self.print_exception()
             return
 
         lfd_count = 0
@@ -145,10 +150,10 @@ class GlobalFaultDetector:
                     LFD_status_msg =json.dumps({"server_ip": str(replica_ip), "status": replica_status}).encode('utf-8')
                     self.rm_conn_2.sendall(LFD_status_msg)
                 except Exception as e:
-                    print(e)
+                    self.print_exception()
                     continue
             except Exception as e:
-                print(e)
+                self.print_exception()
                 replica_ip = self.lfd_replica_dict[addr]
                 replica_status = False
                 try:
