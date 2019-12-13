@@ -20,7 +20,7 @@ WHITE =     "\u001b[37m"
 RESET =     "\u001b[0m"
 
 class GlobalFaultDetector:
-    def __init__(self, rm_address=None, gfd_hb_interval=1):
+    def __init__(self, rm_address=None, gfd_hb_interval=5):
         # Get host IP
         self.get_host_ip()
 
