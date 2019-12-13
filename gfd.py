@@ -53,8 +53,10 @@ class GlobalFaultDetector:
     # Finds the IP on the host
     def get_host_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.connect(("8.8.8.8", 80))
         self.host_ip = s.getsockname()[0]
+        s.close()
 
 
     ###############################################
@@ -64,6 +66,7 @@ class GlobalFaultDetector:
     def init_rm_status_comm(self):
         # Create a TCP/IP socket for sending status
         self.rm_status_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.rm_status_conn.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         # Bind the socket to the replication port
         print(RED + "Connecting to RM for status {} ...".format(self.rm_address2) + RESET)
@@ -88,6 +91,7 @@ class GlobalFaultDetector:
         try:
             # Create a TCP/IP socket for hearbeat
             self.rm_hb_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.rm_hb_conn.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
             # Bind the socket to the replication port
             print(RED + 'Connecting to Replication Manager on IP: {} ...'.format(self.rm_hb_addr) + RESET)
