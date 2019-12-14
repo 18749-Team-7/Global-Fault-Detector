@@ -115,19 +115,22 @@ class GlobalFaultDetector:
             self.print_exception()
             return
 
-        lfd_count = 0
-        
-        data = data.decode('utf-8')
-        json_data = json.loads(data)
+        try:
+            lfd_count = 0
+            
+            data = data.decode('utf-8')
+            json_data = json.loads(data)
 
-        replica_ip = json_data["server_ip"]
-        replica_status = json_data["status"]
+            replica_ip = json_data["server_ip"]
+            replica_status = json_data["status"]
 
-        # Edit the replica_ip_list
-        self.members_mutex.acquire()
-        if addr not in self.lfd_replica_dict:
-            self.lfd_replica_dict[addr] = replica_ip
-        self.members_mutex.release()
+            # Edit the replica_ip_list
+            self.members_mutex.acquire()
+            if addr not in self.lfd_replica_dict:
+                self.lfd_replica_dict[addr] = replica_ip
+            self.members_mutex.release()
+        except:
+            pass
 
         # keep receiving status update from LFD, if you don't hear back from LFD, then replica failed
         while True:      
